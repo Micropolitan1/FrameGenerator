@@ -3,473 +3,101 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Printable Picture Frame Generator</title>
+    <title>3D Picture Frame Generator</title>
+    <!-- Load JSCAD libraries from CDN -->
+    <script src="https://unpkg.com/@jscad/modeling@2.11.0/dist/index.js"></script>
+    <script src="https://unpkg.com/@jscad/io@2.4.2/dist/index.js"></script>
+    <script src="https://unpkg.com/@jscad/viewer@2.11.2/dist/index.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-        .container {
-            display: flex;
-            max-width: 1200px;
-            margin: 0 auto;
-            gap: 20px;
-        }
-        .controls {
-            flex: 1;
-            background-color: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .viewer {
-            flex: 2;
-            background-color: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            height: 600px;
-            position: relative;
-        }
-        .form-group {
-            margin-bottom: 15px;
+            margin: 20px;
         }
         label {
             display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
+            margin: 10px 0;
         }
-        input[type="number"] {
-            width: 100%;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
-        button {
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            padding: 10px 15px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-            margin-top: 10px;
-            width: 100%;
-        }
-        button:hover {
-            background-color: #45a049;
-        }
-        .download-btn {
-            background-color: #2196F3;
-        }
-        .download-btn:hover {
-            background-color: #0b7dda;
-        }
-        h1 {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        #status {
+        #viewer {
+            width: 500px;
+            height: 500px;
+            border: 1px solid #ccc;
             margin-top: 20px;
-            padding: 10px;
-            border-radius: 4px;
-            background-color: #f8f9fa;
-            display: none;
+        }
+        #download {
+            margin-top: 20px;
+            padding: 10px 20px;
         }
     </style>
 </head>
 <body>
-    <h1>3D Printable Picture Frame Generator</h1>
-    <div class="container">
-        <div class="controls">
-            <h2>Frame Parameters</h2>
-            <div class="form-group">
-                <label for="innerWidth">Inner Width (mm):</label>
-                <input type="number" id="innerWidth" value="188" min="10" max="1000">
-            </div>
-            <div class="form-group">
-                <label for="innerHeight">Inner Height (mm):</label>
-                <input type="number" id="innerHeight" value="188" min="10" max="1000">
-            </div>
-            <div class="form-group">
-                <label for="outerWidth">Outer Width (mm):</label>
-                <input type="number" id="outerWidth" value="210" min="10" max="1000">
-            </div>
-            <div class="form-group">
-                <label for="outerHeight">Outer Height (mm):</label>
-                <input type="number" id="outerHeight" value="210" min="10" max="1000">
-            </div>
-            <div class="form-group">
-                <label for="frameHeight">Frame Height (mm):</label>
-                <input type="number" id="frameHeight" value="25" min="1" max="100">
-            </div>
-            <button id="generateBtn">Generate Frame</button>
-            <button id="downloadBtn" class="download-btn">Download 3MF</button>
-            <div id="status"></div>
-        </div>
-        <div class="viewer" id="viewer"></div>
+    <h1>Picture Frame Generator</h1>
+    <div>
+        <label>Inner Width (mm): <input type="number" id="innerWidth" value="188" min="1"></label>
+        <label>Inner Height (mm): <input type="number" id="innerHeight" value="188" min="1"></label>
+        <label>Frame Border Width (mm): <input type="number" id="borderWidth" value="11" min="1"></label>
+        <label>Frame Height (mm): <input type="number" id="frameHeight" value="25" min="1"></label>
     </div>
+    <div id="viewer"></div>
+    <button id="download">Download 3MF</button>
 
-    <!-- Import Three.js and related libraries -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/OrbitControls/2.0.0/OrbitControls.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script>
-        // Set up Three.js scene
-        const container = document.getElementById('viewer');
-        const width = container.clientWidth;
-        const height = container.clientHeight;
+        // Initialize the JSCAD viewer
+        const viewerContainer = document.getElementById('viewer');
+        const viewer = new JSCAD.Viewer(viewerContainer, {});
 
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xf0f0f0);
+        // Function to generate the 3D frame model
+        function generateFrame(innerWidth, innerHeight, borderWidth, frameHeight) {
+            const { rectangle } = jscad.modeling.primitives;
+            const { subtract } = jscad.modeling.operations;
+            const { extrudeLinear } = jscad.modeling.extrusions;
 
-        const camera = new THREE.PerspectiveCamera(45, width / height, 1, 10000);
-        camera.position.set(0, 100, 400);
+            const outerWidth = innerWidth + 2 * borderWidth;
+            const outerHeight = innerHeight + 2 * borderWidth;
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(width, height);
-        container.appendChild(renderer.domElement);
-
-        // Add orbit controls
-        const controls = new THREE.OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
-        controls.dampingFactor = 0.25;
-        controls.screenSpacePanning = false;
-        controls.maxPolarAngle = Math.PI / 2;
-
-        // Add lights
-        const ambientLight = new THREE.AmbientLight(0x999999);
-        scene.add(ambientLight);
-
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
-        directionalLight.position.set(1, 1, 1);
-        scene.add(directionalLight);
-
-        // Add grid helper
-        const gridHelper = new THREE.GridHelper(300, 30);
-        scene.add(gridHelper);
-
-        // Function to generate frame mesh
-        function generateFrame() {
-            // Clear existing frame
-            scene.children.forEach(child => {
-                if (child.userData.type === 'frame') {
-                    scene.remove(child);
-                }
-            });
-
-            // Get frame parameters
-            const innerWidth = parseFloat(document.getElementById('innerWidth').value);
-            const innerHeight = parseFloat(document.getElementById('innerHeight').value);
-            const outerWidth = parseFloat(document.getElementById('outerWidth').value);
-            const outerHeight = parseFloat(document.getElementById('outerHeight').value);
-            const frameHeight = parseFloat(document.getElementById('frameHeight').value);
-
-            // Validate dimensions
-            if (outerWidth <= innerWidth || outerHeight <= innerHeight) {
-                showStatus('Error: Outer dimensions must be larger than inner dimensions', 'error');
-                return null;
-            }
-
-            // Calculate frame thickness
-            const thicknessX = (outerWidth - innerWidth) / 2;
-            const thicknessY = (outerHeight - innerHeight) / 2;
-
-            // Create outer box
-            const outerGeometry = new THREE.BoxGeometry(outerWidth, frameHeight, outerHeight);
-            
-            // Create inner box (to subtract)
-            const innerGeometry = new THREE.BoxGeometry(innerWidth, frameHeight + 2, innerHeight);
-            
-            // Create frame using CSG operations (simulated with positioning)
-            const frameMaterial = new THREE.MeshStandardMaterial({ 
-                color: 0x5080e0,
-                metalness: 0.1,
-                roughness: 0.5
-            });
-            
-            // Create outer frame
-            const outerFrame = new THREE.Mesh(outerGeometry, frameMaterial);
-            outerFrame.userData.type = 'frame';
-            scene.add(outerFrame);
-            
-            // Create inner cutout (by using a different color)
-            const innerMaterial = new THREE.MeshStandardMaterial({ 
-                color: 0xf0f0f0,
-                transparent: true,
-                opacity: 0.1
-            });
-            const innerCutout = new THREE.Mesh(innerGeometry, innerMaterial);
-            innerCutout.userData.type = 'frame';
-            scene.add(innerCutout);
-            
-            // Return frame data for 3MF export
-            return {
-                innerWidth,
-                innerHeight,
-                outerWidth,
-                outerHeight,
-                frameHeight,
-                thicknessX,
-                thicknessY
-            };
+            const outerRect = rectangle({ size: [outerWidth, outerHeight] });
+            const innerRect = rectangle({ size: [innerWidth, innerHeight] });
+            const frame2D = subtract(outerRect, innerRect);
+            const frame3D = extrudeLinear({ height: frameHeight }, frame2D);
+            return frame3D;
         }
 
-        // Show status message
-        function showStatus(message, type = 'info') {
-            const statusElement = document.getElementById('status');
-            statusElement.textContent = message;
-            statusElement.style.display = 'block';
-            
-            if (type === 'error') {
-                statusElement.style.backgroundColor = '#ffebee';
-                statusElement.style.color = '#c62828';
-            } else {
-                statusElement.style.backgroundColor = '#e8f5e9';
-                statusElement.style.color = '#2e7d32';
-            }
-            
-            setTimeout(() => {
-                statusElement.style.display = 'none';
-            }, 5000);
+        // Function to update the viewer with the current model
+        function updateModel() {
+            const innerWidth = parseFloat(document.getElementById('innerWidth').value) || 188;
+            const innerHeight = parseFloat(document.getElementById('innerHeight').value) || 188;
+            const borderWidth = parseFloat(document.getElementById('borderWidth').value) || 11;
+            const frameHeight = parseFloat(document.getElementById('frameHeight').value) || 25;
+
+            const model = generateFrame(innerWidth, innerHeight, borderWidth, frameHeight);
+            viewer.setGeometry(model);
         }
 
-        // Generate 3MF file
-        function generate3MF(frameData) {
-            if (!frameData) return;
-            
-            // Create a minimal 3MF file structure
-            const zip = new JSZip();
-            
-            // Add the core 3MF files
-            const modelFile = generateModelXML(frameData);
-            zip.file("[Content_Types].xml", generateContentTypesXML());
-            zip.file("_rels/.rels", generateRelsXML());
-            zip.file("3D/3dmodel.model", modelFile);
-            
-            // Generate the 3MF file
-            zip.generateAsync({type: "blob"})
-                .then(function(content) {
-                    // Create download link
-                    const url = URL.createObjectURL(content);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = "picture_frame.3mf";
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                    
-                    showStatus('3MF file generated and downloaded successfully');
-                });
-        }
+        // Initial model render
+        updateModel();
 
-        // Generate Content_Types.xml
-        function generateContentTypesXML() {
-            return `<?xml version="1.0" encoding="UTF-8"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml" />
-  <Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml" />
-</Types>`;
-        }
-
-        // Generate .rels file
-        function generateRelsXML() {
-            return `<?xml version="1.0" encoding="UTF-8"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel" />
-</Relationships>`;
-        }
-
-        // Generate model XML for the frame
-        function generateModelXML(frameData) {
-            // Generate simplified mesh vertices and triangles for a rectangular frame
-            // This is a simplified representation - a true mesh would have more vertices and triangles
-            
-            const {innerWidth, innerHeight, outerWidth, outerHeight, frameHeight, thicknessX, thicknessY} = frameData;
-            
-            // Define corners of outer rectangle
-            const x1 = -outerWidth / 2;
-            const x2 = outerWidth / 2;
-            const y1 = -outerHeight / 2;
-            const y2 = outerHeight / 2;
-            const z1 = -frameHeight / 2;
-            const z2 = frameHeight / 2;
-            
-            // Define corners of inner rectangle
-            const ix1 = -innerWidth / 2;
-            const ix2 = innerWidth / 2;
-            const iy1 = -innerHeight / 2;
-            const iy2 = innerHeight / 2;
-            
-            // Vertices for front face of outer rectangle
-            const v1 = `${x1} ${y1} ${z2}`;  // Bottom left front
-            const v2 = `${x2} ${y1} ${z2}`;  // Bottom right front
-            const v3 = `${x2} ${y2} ${z2}`;  // Top right front
-            const v4 = `${x1} ${y2} ${z2}`;  // Top left front
-            
-            // Vertices for back face of outer rectangle
-            const v5 = `${x1} ${y1} ${z1}`;  // Bottom left back
-            const v6 = `${x2} ${y1} ${z1}`;  // Bottom right back
-            const v7 = `${x2} ${y2} ${z1}`;  // Top right back
-            const v8 = `${x1} ${y2} ${z1}`;  // Top left back
-            
-            // Vertices for front face of inner rectangle
-            const v9  = `${ix1} ${iy1} ${z2}`;  // Bottom left front
-            const v10 = `${ix2} ${iy1} ${z2}`;  // Bottom right front
-            const v11 = `${ix2} ${iy2} ${z2}`;  // Top right front
-            const v12 = `${ix1} ${iy2} ${z2}`;  // Top left front
-            
-            // Vertices for back face of inner rectangle
-            const v13 = `${ix1} ${iy1} ${z1}`;  // Bottom left back
-            const v14 = `${ix2} ${iy1} ${z1}`;  // Bottom right back
-            const v15 = `${ix2} ${iy2} ${z1}`;  // Top right back
-            const v16 = `${ix1} ${iy2} ${z1}`;  // Top left back
-            
-            // Simplistic XML representation for a frame
-            // Note: This is a placeholder - a real implementation would generate proper triangles
-            // for a watertight manifold mesh representing the frame shape
-            
-            return `<?xml version="1.0" encoding="UTF-8"?>
-<model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
-  <resources>
-    <object id="1" type="model">
-      <mesh>
-        <vertices>
-          <vertex x="${x1}" y="${y1}" z="${z2}" /><!-- 0: Outer bottom left front -->
-          <vertex x="${x2}" y="${y1}" z="${z2}" /><!-- 1: Outer bottom right front -->
-          <vertex x="${x2}" y="${y2}" z="${z2}" /><!-- 2: Outer top right front -->
-          <vertex x="${x1}" y="${y2}" z="${z2}" /><!-- 3: Outer top left front -->
-          <vertex x="${x1}" y="${y1}" z="${z1}" /><!-- 4: Outer bottom left back -->
-          <vertex x="${x2}" y="${y1}" z="${z1}" /><!-- 5: Outer bottom right back -->
-          <vertex x="${x2}" y="${y2}" z="${z1}" /><!-- 6: Outer top right back -->
-          <vertex x="${x1}" y="${y2}" z="${z1}" /><!-- 7: Outer top left back -->
-          <vertex x="${ix1}" y="${iy1}" z="${z2}" /><!-- 8: Inner bottom left front -->
-          <vertex x="${ix2}" y="${iy1}" z="${z2}" /><!-- 9: Inner bottom right front -->
-          <vertex x="${ix2}" y="${iy2}" z="${z2}" /><!-- 10: Inner top right front -->
-          <vertex x="${ix1}" y="${iy2}" z="${z2}" /><!-- 11: Inner top left front -->
-          <vertex x="${ix1}" y="${iy1}" z="${z1}" /><!-- 12: Inner bottom left back -->
-          <vertex x="${ix2}" y="${iy1}" z="${z1}" /><!-- 13: Inner bottom right back -->
-          <vertex x="${ix2}" y="${iy2}" z="${z1}" /><!-- 14: Inner top right back -->
-          <vertex x="${ix1}" y="${iy2}" z="${z1}" /><!-- 15: Inner top left back -->
-        </vertices>
-        <triangles>
-          <!-- Outer front face -->
-          <triangle v1="0" v2="1" v3="2" />
-          <triangle v1="0" v2="2" v3="3" />
-          
-          <!-- Outer right face -->
-          <triangle v1="1" v2="5" v3="6" />
-          <triangle v1="1" v2="6" v3="2" />
-          
-          <!-- Outer back face -->
-          <triangle v1="5" v2="4" v3="7" />
-          <triangle v1="5" v2="7" v3="6" />
-          
-          <!-- Outer left face -->
-          <triangle v1="4" v2="0" v3="3" />
-          <triangle v1="4" v2="3" v3="7" />
-          
-          <!-- Outer bottom face -->
-          <triangle v1="4" v2="5" v3="1" />
-          <triangle v1="4" v2="1" v3="0" />
-          
-          <!-- Outer top face -->
-          <triangle v1="3" v2="2" v3="6" />
-          <triangle v1="3" v2="6" v3="7" />
-          
-          <!-- Inner front face (reversed normal) -->
-          <triangle v1="8" v2="10" v3="9" />
-          <triangle v1="8" v2="11" v3="10" />
-          
-          <!-- Inner right face (reversed normal) -->
-          <triangle v1="9" v2="10" v3="14" />
-          <triangle v1="9" v2="14" v3="13" />
-          
-          <!-- Inner back face (reversed normal) -->
-          <triangle v1="13" v2="14" v3="15" />
-          <triangle v1="13" v2="15" v3="12" />
-          
-          <!-- Inner left face (reversed normal) -->
-          <triangle v1="12" v2="15" v3="11" />
-          <triangle v1="12" v2="11" v3="8" />
-          
-          <!-- Inner bottom face (reversed normal) -->
-          <triangle v1="8" v2="9" v3="13" />
-          <triangle v1="8" v2="13" v3="12" />
-          
-          <!-- Inner top face (reversed normal) -->
-          <triangle v1="11" v2="15" v3="14" />
-          <triangle v1="11" v2="14" v3="10" />
-          
-          <!-- Connect inner to outer - bottom edge -->
-          <triangle v1="0" v2="8" v3="9" />
-          <triangle v1="0" v2="9" v3="1" />
-          <triangle v1="4" v2="12" v3="13" />
-          <triangle v1="4" v2="13" v3="5" />
-          
-          <!-- Connect inner to outer - right edge -->
-          <triangle v1="1" v2="9" v3="10" />
-          <triangle v1="1" v2="10" v3="2" />
-          <triangle v1="5" v2="13" v3="14" />
-          <triangle v1="5" v2="14" v3="6" />
-          
-          <!-- Connect inner to outer - top edge -->
-          <triangle v1="2" v2="10" v3="11" />
-          <triangle v1="2" v2="11" v3="3" />
-          <triangle v1="6" v2="14" v3="15" />
-          <triangle v1="6" v2="15" v3="7" />
-          
-          <!-- Connect inner to outer - left edge -->
-          <triangle v1="3" v2="11" v3="8" />
-          <triangle v1="3" v2="8" v3="0" />
-          <triangle v1="7" v2="15" v3="12" />
-          <triangle v1="7" v2="12" v3="4" />
-        </triangles>
-      </mesh>
-    </object>
-  </resources>
-  <build>
-    <item objectid="1" />
-  </build>
-</model>`;
-        }
-
-        // Animation loop
-        function animate() {
-            requestAnimationFrame(animate);
-            controls.update();
-            renderer.render(scene, camera);
-        }
-
-        // Initialize the scene
-        window.addEventListener('resize', onWindowResize, false);
-
-        function onWindowResize() {
-            const width = container.clientWidth;
-            const height = container.clientHeight;
-            camera.aspect = width / height;
-            camera.updateProjectionMatrix();
-            renderer.setSize(width, height);
-        }
-
-        // Event listeners
-        document.getElementById('generateBtn').addEventListener('click', function() {
-            const frameData = generateFrame();
-            if (frameData) {
-                showStatus('Frame generated successfully');
-            }
+        // Event listeners for real-time updates
+        ['innerWidth', 'innerHeight', 'borderWidth', 'frameHeight'].forEach(id => {
+            document.getElementById(id).addEventListener('input', updateModel);
         });
 
-        document.getElementById('downloadBtn').addEventListener('click', function() {
-            const frameData = generateFrame();
-            generate3MF(frameData);
-        });
+        // Download button functionality
+        document.getElementById('download').addEventListener('click', () => {
+            const innerWidth = parseFloat(document.getElementById('innerWidth').value) || 188;
+            const innerHeight = parseFloat(document.getElementById('innerHeight').value) || 188;
+            const borderWidth = parseFloat(document.getElementById('borderWidth').value) || 11;
+            const frameHeight = parseFloat(document.getElementById('frameHeight').value) || 25;
 
-        // Initial frame generation
-        generateFrame();
-        animate();
+            const model = generateFrame(innerWidth, innerHeight, borderWidth, frameHeight);
+            const { threemfSerializer } = jscad.io;
+            const data = threemfSerializer.serialize(model);
+            const blob = new Blob(data, { type: 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'picture_frame.3mf';
+            a.click();
+            URL.revokeObjectURL(url);
+        });
     </script>
 </body>
 </html>
