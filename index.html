@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>3D Picture Frame Generator</title>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    #gui {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 10px;
+      border-radius: 4px;
+      z-index: 1;
+      font-family: sans-serif;
+    }
+    #gui label {
+      display: block;
+      margin-bottom: 5px;
+    }
+    #gui input {
+      width: 80px;
+      margin-left: 5px;
+    }
+    #gui button {
+      margin-top: 5px;
+      display: block;
+      width: 100%;
+    }
+    #container {
+      width: 100vw;
+      height: 100vh;
+    }
+  </style>
+</head>
+<body>
+  <div id="gui">
+    <label>
+      Inner Dimension (mm):
+      <input type="number" id="innerDim" value="188">
+    </label>
+    <label>
+      Outer Dimension (mm):
+      <input type="number" id="outerDim" value="210">
+    </label>
+    <label>
+      Height (mm):
+      <input type="number" id="height" value="25">
+    </label>
+    <button id="generate">Generate Frame</button>
+    <button id="download">Download 3MF</button>
+  </div>
+  <div id="container"></div>
+  
+  <script type="module">
+    // Import Three.js and supporting modules from a CDN
+    import * as THREE from 'https://unpkg.com/three@0.152.2/build/three.module.js';
+    import { OrbitControls } from 'https://unpkg.com/three@0.152.2/examples/jsm/controls/OrbitControls.js';
+    import { ThreeMFExporter } from 'https://unpkg.com/three@0.152.2/examples/jsm/exporters/3MFExporter.js';
+
+    let scene, camera, renderer, controls, frameMesh;
+    const container = document.getElementById('container');
+
+    init();
+    generateFrame(); // Generate an initial frame
+
+    document.getElementById('generate').addEventListener('click', generateFrame);
+    document.getElementById('download').addEventListener('click', download3MF);
+
+    function init() {
+      // Create scene and set background color
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0xf0f0f0);
+
+      // Set up the camera with Z as up
+      camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+      camera.position.set(0, -300, 300);
+      camera.up.set(0, 0, 1);
+
+      // Set up renderer
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(container.clientWidth, container.clientHeight);
+      container.appendChild(renderer.domElement);
+
+      // Add orbit controls for interaction
+      controls = new OrbitControls(camera, renderer.domElement);
+      controls.target.set(0, 0, 12.5); // roughly center on the frame height
+      controls.update();
+
+      // Add lighting
+      scene.add(new THREE.AmbientLight(0x888888));
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      directionalLight.position.set(1, 1, 1);
+      scene.add(directionalLight);
+
+      window.addEventListener('resize', onWindowResize);
+      animate();
+    }
+
+    function onWindowResize() {
+      camera.aspect = container.clientWidth / container.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(container.clientWidth, container.clientHeight);
+    }
+
+    function generateFrame() {
+      // Remove previous mesh if it exists
+      if (frameMesh) {
+        scene.remove(frameMesh);
+        frameMesh.geometry.dispose();
+        frameMesh.material.dispose();
+      }
+
+      // Get dimensions from input fields
+      const innerDim = parseFloat(document.getElementById('innerDim').value);
+      const outerDim = parseFloat(document.getElementById('outerDim').value);
+      const height = parseFloat(document.getElementById('height').value);
+
+      // Create a 2D shape: outer rectangle with a rectangular hole for the inner opening.
+      const shape = new THREE.Shape();
+      shape.moveTo(-outerDim/2, -outerDim/2);
+      shape.lineTo(outerDim/2, -outerDim/2);
+      shape.lineTo(outerDim/2, outerDim/2);
+      shape.lineTo(-outerDim/2, outerDim/2);
+      shape.lineTo(-outerDim/2, -outerDim/2);
+
+      const hole = new THREE.Path();
+      hole.moveTo(-innerDim/2, -innerDim/2);
+      hole.lineTo(innerDim/2, -innerDim/2);
+      hole.lineTo(innerDim/2, innerDim/2);
+      hole.lineTo(-innerDim/2, innerDim/2);
+      hole.lineTo(-innerDim/2, -innerDim/2);
+      shape.holes.push(hole);
+
+      // Extrude the 2D shape to give it thickness (height)
+      const extrudeSettings = { depth: height, bevelEnabled: false };
+      const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+      geometry.center(); // Center the geometry
+
+      const material = new THREE.MeshPhongMaterial({ color: 0x156289, emissive: 0x072534, side: THREE.DoubleSide });
+      frameMesh = new THREE.Mesh(geometry, material);
+      scene.add(frameMesh);
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      renderer.render(scene, camera);
+    }
+
+    function download3MF() {
+      // Use the ThreeMFExporter to export the scene
+      const exporter = new ThreeMFExporter();
+      exporter.parse(scene, function(result) {
+        // The result is the 3MF file content; create a Blob for downloading.
+        const blob = new Blob([result], { type: 'application/vnd.ms-package.3dmanufacturing-3dmodel+xml' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'frame.3mf';
+        link.click();
+        URL.revokeObjectURL(url);
+      });
+    }
+  </script>
+</body>
+</html>
